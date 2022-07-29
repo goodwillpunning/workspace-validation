@@ -28,9 +28,8 @@ if targetWorkspaceUrl[-1] != '/':
 # MAGIC 3. Jobs
 # MAGIC 4. Clusters
 # MAGIC 5. Instance Pools
-# MAGIC 6. Mounts
-# MAGIC 7. Init Scripts
-# MAGIC 8. Secrets
+# MAGIC 6. Init Scripts
+# MAGIC 7. Secrets
 
 # COMMAND ----------
 
@@ -198,6 +197,79 @@ if validation_df.count() == 0:
 else:
   print('Jobs don\'t match between workspaces!')
   validation_df.display()  
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Groups Validation
+
+# COMMAND ----------
+
+def get_groups(workspace, token):
+  response = requests.get(
+      f'{workspace}api/2.0/preview/scim/v2/Groups',
+      headers={
+          'Authorization': f'Bearer {token}'
+      }
+  )
+  response.raise_for_status()
+  if 'Resources' in response.json():
+    groups = response.json()['Resources']
+    return list(map(lambda group: group['displayName'], groups))
+  else:
+    print("No Groups to process!")
+    return []
+  
+missing_groups = []
+source_groups = get_groups(sourceWorkspaceUrl, sourceWorkspacePat)
+target_groups = get_groups(targetWorkspaceUrl, targetWorkspacePat)
+for group in source_groups:
+  if group not in target_groups:
+    missing_groups.append(group)
+    
+if len(missing_groups) == 0:
+  print("Groups match!")
+else:
+  spark.createDataFrame(list(map(lambda g: {'missing_group': g}, missing_groups)), 'missing_group string').display()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Users Validation
+
+# COMMAND ----------
+
+def get_users(workspace, token):
+  response = requests.get(
+      f'{workspace}api/2.0/preview/scim/v2/Users',
+      headers={
+          'Authorization': f'Bearer {token}'
+      }
+  )
+  response.raise_for_status()
+  schema = 'workspace string, displayName string, userName string, active boolean'
+  if 'Resources' in response.json():
+    users = response.json()['Resources']
+    xformed_users = [{
+      'workspace': workspace,
+      'displayName': user['displayName'] if 'displayName' in user else None,
+      'userName': user['userName'],
+      'active': user['active']
+    } for user in users]
+    return spark.createDataFrame(xformed_users, schema)
+  else:
+    print("No Users to process!")
+    return spark.createDataFrame([], schema)
+  
+source_users = get_users(sourceWorkspaceUrl, sourceWorkspacePat)
+target_users = get_users(targetWorkspaceUrl, targetWorkspacePat)
+
+validation_df = source_users.drop("workspace").exceptAll(target_users.drop("workspace"))
+if validation_df.count() == 0:
+  print('Users match between workspaces!')
+else:
+  print('Users don\'t match between workspaces!')
+  validation_df.display()    
 
 # COMMAND ----------
 
