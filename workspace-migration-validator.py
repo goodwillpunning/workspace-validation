@@ -1,8 +1,8 @@
 # Databricks notebook source
-dbutils.widgets.text("sourceWorkspaceUrl", "https://eastus2.azuredatabricks.net/", "Source Workspace URL")
-dbutils.widgets.text("sourceWorkspacePat", "dapid0eb6a4ba5ea9c88cbbf7791dd500587", "Source Workspace PAT")
-dbutils.widgets.text("targetWorkspaceUrl", "https://adb-984752964297111.11.azuredatabricks.net/", "Target Workspace URL")
-dbutils.widgets.text("targetWorkspacePat", "dapi2b919b9929b913ad8a7d3f4a62654b7f", "Target Workspace PAT")
+dbutils.widgets.text("sourceWorkspaceUrl", "https://adb-01234567890.azuredatabricks.net/", "Source Workspace URL")
+dbutils.widgets.text("sourceWorkspacePat", "dapi01234567890", "Source Workspace PAT")
+dbutils.widgets.text("targetWorkspaceUrl", "https://adb-01234567890.azuredatabricks.net/", "Target Workspace URL")
+dbutils.widgets.text("targetWorkspacePat", "dapi01234567890", "Target Workspace PAT")
 
 # COMMAND ----------
 
