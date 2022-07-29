@@ -1,15 +1,23 @@
 # Databricks notebook source
-dbutils.widgets.text("sourceWorskpaceUrl", "https://adb-0123456789.azuredatabricks.net/", "Source Workspace URL")
-dbutils.widgets.text("sourceWorkspacePat", "dapi1234567890", "Source Workspace PAT")
-dbutils.widgets.text("targetWorskpaceUrl", "https://adb-0123456789.azuredatabricks.net/", "Target Workspace URL")
-dbutils.widgets.text("targetWorkspacePat", "dapi1234567890", "Target Workspace PAT")
+dbutils.widgets.text("sourceWorkspaceUrl", "https://eastus2.azuredatabricks.net/", "Source Workspace URL")
+dbutils.widgets.text("sourceWorkspacePat", "dapid0eb6a4ba5ea9c88cbbf7791dd500587", "Source Workspace PAT")
+dbutils.widgets.text("targetWorkspaceUrl", "https://adb-984752964297111.11.azuredatabricks.net/", "Target Workspace URL")
+dbutils.widgets.text("targetWorkspacePat", "dapi2b919b9929b913ad8a7d3f4a62654b7f", "Target Workspace PAT")
 
 # COMMAND ----------
 
-sourceWorskpaceUrl = dbutils.widgets.get("sourceWorskpaceUrl")
+import requests
+
+sourceWorkspaceUrl = dbutils.widgets.get("sourceWorkspaceUrl")
 sourceWorkspacePat = dbutils.widgets.get("sourceWorkspacePat")
-targetWorskpaceUrl = dbutils.widgets.get("targetWorskpaceUrl")
+targetWorkspaceUrl = dbutils.widgets.get("targetWorkspaceUrl")
 targetWorkspacePat = dbutils.widgets.get("targetWorkspacePat")
+
+# Ensure that the workspace URLs end with a "/"
+if sourceWorkspaceUrl[-1] != '/':
+  sourceWorkspaceUrl = sourceWorkspaceUrl + '/'
+if targetWorkspaceUrl[-1] != '/':
+  targetWorkspaceUrl = targetWorkspaceUrl + '/'
 
 # COMMAND ----------
 
@@ -31,8 +39,6 @@ targetWorkspacePat = dbutils.widgets.get("targetWorkspacePat")
 
 # COMMAND ----------
 
-import requests
-
 def get_secret_scopes(workspace, token):
   response = requests.get(
     f'{workspace}api/2.0/secrets/scopes/list',
@@ -40,20 +46,25 @@ def get_secret_scopes(workspace, token):
       'Authorization': f'Bearer {token}'
     }
   )
-  scopes = response.json()['scopes']
-  xformed_scopes = [{
-    'workspace': workspace,
-    'name': scope['name'],
-    'databricks_scope': True if scope['backend_type'] == 'DATABRICKS' else False,
-    'azure_keyvault_scope': True if scope['backend_type'] == 'AZURE_KEYVAULT' else False,
-    'keyvault_resource_id': scope['keyvault_metadata']['resource_id'] if scope['backend_type'] == 'AZURE_KEYVAULT' else None,
-    'keyvault_dns_name': scope['keyvault_metadata']['dns_name'] if scope['backend_type'] == 'AZURE_KEYVAULT' else None
-  } for scope in scopes]
-  return spark.createDataFrame(xformed_scopes,
-                             'workspace string, name string, databricks_scope string, azure_keyvault_scope string, keyvault_resource_id string, keyvault_dns_name string')
+  response.raise_for_status()
+  schema = 'workspace string, name string, databricks_scope string, azure_keyvault_scope string, keyvault_resource_id string, keyvault_dns_name string'
+  if 'scopes' in response.json():
+    scopes = response.json()['scopes']
+    xformed_scopes = [{
+      'workspace': workspace,
+      'name': scope['name'],
+      'databricks_scope': True if scope['backend_type'] == 'DATABRICKS' else False,
+      'azure_keyvault_scope': True if scope['backend_type'] == 'AZURE_KEYVAULT' else False,
+      'keyvault_resource_id': scope['keyvault_metadata']['resource_id'] if scope['backend_type'] == 'AZURE_KEYVAULT' else None,
+      'keyvault_dns_name': scope['keyvault_metadata']['dns_name'] if scope['backend_type'] == 'AZURE_KEYVAULT' else None
+    } for scope in scopes]
+    return spark.createDataFrame(xformed_scopes, schema)
+  else:
+    print('There are no Secrets!')
+    return spark.createDataFrame([], schema)
 
-source_scopes = get_secret_scopes(sourceWorskpaceUrl, sourceWorkspacePat)
-target_scopes = get_secret_scopes(targetWorskpaceUrl, targetWorkspacePat)
+source_scopes = get_secret_scopes(sourceWorkspaceUrl, sourceWorkspacePat)
+target_scopes = get_secret_scopes(targetWorkspaceUrl, targetWorkspacePat)
 
 validation_df = source_scopes.drop("workspace").exceptAll(target_scopes.drop("workspace"))
 if validation_df.count() == 0:
@@ -65,27 +76,49 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Untility for Re-adding Key Vault Scopes
+# MAGIC ### Instance Pools Validation
 
 # COMMAND ----------
 
-def recreate_keyvault_scope(workspace, token, scope_name, resource_id, dns_name, initial_manage_principal):
-  response = requests.post(
-    f'{workspace}api/2.0/secrets/scopes/create',
+def get_instance_pools(workspace, token):
+  response = requests.get(
+    f'{workspace}api/2.0/instance-pools/list',
     headers={
       'Authorization': f'Bearer {token}'
     }
-    json={
-      "scope": scope_name,
-      "scope_backend_type": "AZURE_KEYVAULT",
-      "backend_azure_keyvault": {
-        "resource_id": resource_id,
-        "dns_name": dns_name
-      },
-      "initial_manage_principal": initial_manage_principal
-    }
   )
+  response.raise_for_status()
+  schema = 'workspace string, name string, min_idle_instances long, node_type_id string, autotermination_minutes long, instance_availability string, elastic_disk_enabled boolean'
+  if 'instance_pools' in response.json():
+    pools = response.json()['instance_pools']
+    xformed_pools = [{
+      'workspace': workspace,
+      'name': pool['instance_pool_name'],
+      'min_idle_instances': pool['min_idle_instances'],
+      'node_type_id': pool['node_type_id'],
+      'autotermination_minutes': pool['idle_instance_autotermination_minutes'],
+      'instance_availability': pool['azure_attributes']['availability'],
+      'elastic_disk_enabled': pool['enable_elastic_disk']
+    } for pool in pools]
+    return spark.createDataFrame(xformed_pools, schema)
+  else:
+    print('There are no instance pools.')
+    return spark.createDataFrame([], schema)
+  
+source_pools = get_instance_pools(sourceWorkspaceUrl, sourceWorkspacePat)
+target_pools = get_instance_pools(targetWorkspaceUrl, targetWorkspacePat)
 
+validation_df = source_pools.drop("workspace").exceptAll(target_pools.drop("workspace"))
+if validation_df.count() == 0:
+  print('Instance pools match between workspaces!')
+else:
+  print('Instance pools don\'t match between workspaces!')
+  validation_df.display()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Interactive Clusters Validation
 
 # COMMAND ----------
 
@@ -96,12 +129,34 @@ def get_interactive_cluster(workspace, token):
         'Authorization': f'Bearer {token}'
     }
   )
-  clusters = response.json()['clusters']
-  return [{
-    'cluster_id': cluster['cluster_id']
-    'cluter_came: cluster['cluster_']
-          } for cluster in clusters]
+  response.raise_for_status()
+  schema = 'workspace string, cluster_name string, dbr_version string, first_on_demand long, availability string, autotermination_minutes long, instance_type string'
+  if 'clusters' in response.json():
+    clusters = response.json()['clusters']
+    xformed_clusters = [{
+      'workspace': workspace,
+      'cluster_name': cluster['cluster_name'],
+      'dbr_version': cluster['spark_version'],
+      'first_on_demand': cluster['azure_attributes']['first_on_demand'],
+      'availability': cluster['azure_attributes']['availability'],
+      'autotermination_minutes': cluster['autotermination_minutes'],
+      'instance_type': cluster['node_type_id']
+    } for cluster in clusters]
+    return spark.createDataFrame(xformed_clusters, schema)
+  else:
+    print('There are no interactive clusters!')
+    return spark.createDataFrame([], schema)
+  
+source_interactive_clusters = get_interactive_cluster(sourceWorkspaceUrl, sourceWorkspacePat)
+target_interactive_clusters = get_interactive_cluster(targetWorkspaceUrl, targetWorkspacePat)
 
-missing_interactive_clusters = get_interactive_cluster(sourceWorskpaceUrl, sourceWorkspacePat)
+validation_df = source_interactive_clusters.drop("workspace").exceptAll(target_interactive_clusters.drop("workspace"))
+if validation_df.count() == 0:
+  print('Interactive clusters match between workspaces!')
+else:
+  print('Interactive clusters don\'t match between workspaces!')
+  validation_df.display()
 
 # COMMAND ----------
+
+
