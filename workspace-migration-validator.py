@@ -159,4 +159,46 @@ else:
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### Jobs Validation
+
+# COMMAND ----------
+
+def get_jobs(workspace, token):
+  response = requests.get(
+    f'{workspace}api/2.0/jobs/list',
+    headers={
+        'Authorization': f'Bearer {token}'
+    }
+  )
+  response.raise_for_status()
+  schema = 'workspace string, job_name string, job_type string, job_format string, cron_schedule string, timezone string, timeout_seconds long'
+  if 'jobs' in response.json():
+    jobs = response.json()['jobs']
+    xformed_jobs = [{
+      'workspace': workspace,
+      'job_name': job['settings']['name'],
+      'job_type': job['job_type'] if 'job_type' in job else None,
+      'job_format': job['settings']['format'],
+      'cron_schedule': job['settings']['schedule']['quartz_cron_expression'] if 'schedule' in job['settings'] else None,
+      'timezone': job['settings']['schedule']['timezone_id'] if 'schedule' in job['settings'] else None,
+      'timeout_seconds': job['settings']['timeout_seconds'] if 'timeout_seconds' in job['settings'] else None
+    } for job in jobs]
+    return spark.createDataFrame(xformed_jobs, schema)
+  else:
+    print('There are no Jobs!')
+    return spark.createDataFrame([], schema)
+  
+source_jobs = get_jobs(sourceWorkspaceUrl, sourceWorkspacePat)
+target_jobs = get_jobs(targetWorkspaceUrl, targetWorkspacePat)
+
+validation_df = source_jobs.drop("workspace").exceptAll(target_jobs.drop("workspace"))
+if validation_df.count() == 0:
+  print('Jobs match between workspaces!')
+else:
+  print('Jobs don\'t match between workspaces!')
+  validation_df.display()  
+
+# COMMAND ----------
+
 
