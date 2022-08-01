@@ -273,4 +273,45 @@ else:
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### Init Scripts Validation
+
+# COMMAND ----------
+
+def get_workspace_objects(workspace, token, path):
+  response = requests.get(
+    f'{workspace}api/2.0/workspace/list',
+    headers={
+      'Authorization': f'Bearer {token}'
+    },
+    json={
+      'path': path
+    }
+  )
+  schema = 'workspace string, file_name string, file_path string, file_type string'
+  if 'objects' in response.json():
+    files = response.json()['objects']
+    for file in files:
+      xformed_workspace_objs = [{
+        'workspace': workspace,
+        'file_name': file['path'].split("/")[-1],
+        'file_path': file['path'],
+        'file_type': file['object_type']
+      } for file in files]
+      return spark.createDataFrame(xformed_workspace_objs, schema)
+  else:
+    print("No workspace objects to process!")
+    return spark.createDataFrame([], schema)
+  
+source_init_scripts = get_workspace_objects(sourceWorkspaceUrl, sourceWorkspacePat, '/FileStore/scripts')
+target_init_scripts = get_workspace_objects(targetWorkspaceUrl, targetWorkspacePat, '/FileStore/scripts')
+missing_init_scripts = source_init_scripts.drop("workspace").exceptAll(target_init_scripts.drop("workspace"))
+if missing_init_scripts.count() > 0:
+  print("Init scripts don't match!")
+  missing_init_scripts.display()
+else:
+  print("Init scripts match!")
+
+# COMMAND ----------
+
 
