@@ -314,4 +314,18 @@ else:
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### Root workspace validator
 
+# COMMAND ----------
+
+# User home directories
+user_home_dir = '/Users'
+source_user_homes = get_workspace_objects(sourceWorkspaceUrl, sourceWorkspacePat, user_home_dir)
+target_user_homes = get_workspace_objects(targetWorkspaceUrl, targetWorkspacePat, user_home_dir)
+missing_user_homes = source_user_homes.drop("workspace").exceptAll(target_user_homes.drop("workspace"))
+if missing_user_homes.count() > 0:
+  print("User home directories don't match!")
+  missing_user_homes.display()
+else:
+  print("User home directories match!")
