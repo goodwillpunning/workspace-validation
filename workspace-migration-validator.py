@@ -319,13 +319,28 @@ else:
 
 # COMMAND ----------
 
+from functools import reduce
+from pyspark.sql import DataFrame
+
 # User home directories
 user_home_dir = '/Users'
-source_user_homes = get_workspace_objects(sourceWorkspaceUrl, sourceWorkspacePat, user_home_dir)
-target_user_homes = get_workspace_objects(targetWorkspaceUrl, targetWorkspacePat, user_home_dir)
-missing_user_homes = source_user_homes.drop("workspace").exceptAll(target_user_homes.drop("workspace"))
-if missing_user_homes.count() > 0:
-  print("User home directories don't match!")
-  missing_user_homes.display()
+source_user_home_dfs = []
+source_user_homes = get_workspace_objects(sourceWorkspaceUrl, sourceWorkspacePat, user_home_dir).where("file_type='DIRECTORY'").select("file_path")
+user_homes = [home['file_path'] for home in source_user_homes.collect()]
+for user_home in user_homes:
+  source_user_home_dfs.append(get_workspace_objects(sourceWorkspaceUrl, sourceWorkspacePat, user_home).where("file_type!='DIRECTORY'"))
+source_user_notebooks = reduce(DataFrame.unionAll, source_user_home_dfs)
+
+target_user_home_dfs = []
+target_user_homes = get_workspace_objects(targetWorkspaceUrl, targetWorkspacePat, user_home_dir).where("file_type='DIRECTORY'").select("file_path")
+user_homes = [home['file_path'] for home in target_user_homes.collect()]
+for user_home in user_homes:
+  target_user_home_dfs.append(get_workspace_objects(targetWorkspaceUrl, targetWorkspacePat, user_home).where("file_type!='DIRECTORY'"))
+target_user_notebooks = reduce(DataFrame.unionAll, target_user_home_dfs)
+
+missing_user_notebooks = source_user_notebooks.drop("workspace").exceptAll(target_user_notebooks.drop("workspace"))
+if missing_user_notebooks.count() > 0:
+  print("User notebooks don't match!")
+  missing_user_notebooks.display()
 else:
-  print("User home directories match!")
+  print("User notebooks match!")
