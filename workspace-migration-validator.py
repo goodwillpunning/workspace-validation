@@ -1,8 +1,8 @@
 # Databricks notebook source
 dbutils.widgets.text("sourceWorkspaceUrl", "https://<REPLACE_ME>.azuredatabricks.net/", "Source Workspace URL")
-dbutils.widgets.text("sourceWorkspacePat", "dapi<REPLACE_ME>", "Source Workspace PAT")
+dbutils.widgets.text("sourceWorkspacePat", "dapi<REPLACE_ME>", "Source Workspace token")
 dbutils.widgets.text("targetWorkspaceUrl", "https://<REPLACE_ME>.azuredatabricks.net/", "Target Workspace URL")
-dbutils.widgets.text("targetWorkspacePat", "dapi<REPLACE_ME>", "Target Workspace PAT")
+dbutils.widgets.text("targetWorkspacePat", "dapi<REPLACE_ME>", "Target Workspace token")
 
 # COMMAND ----------
 
@@ -103,7 +103,7 @@ def get_instance_pools(workspace, token):
   else:
     print('There are no instance pools.')
     return spark.createDataFrame([], schema)
-  
+
 source_pools = get_instance_pools(sourceWorkspaceUrl, sourceWorkspacePat)
 target_pools = get_instance_pools(targetWorkspaceUrl, targetWorkspacePat)
 
@@ -145,7 +145,7 @@ def get_interactive_cluster(workspace, token):
   else:
     print('There are no interactive clusters!')
     return spark.createDataFrame([], schema)
-  
+
 source_interactive_clusters = get_interactive_cluster(sourceWorkspaceUrl, sourceWorkspacePat)
 target_interactive_clusters = get_interactive_cluster(targetWorkspaceUrl, targetWorkspacePat)
 
@@ -187,7 +187,7 @@ def get_jobs(workspace, token):
   else:
     print('There are no Jobs!')
     return spark.createDataFrame([], schema)
-  
+
 source_jobs = get_jobs(sourceWorkspaceUrl, sourceWorkspacePat)
 target_jobs = get_jobs(targetWorkspaceUrl, targetWorkspacePat)
 
@@ -196,7 +196,7 @@ if validation_df.count() == 0:
   print('Jobs match between workspaces!')
 else:
   print('Jobs don\'t match between workspaces!')
-  validation_df.display()  
+  validation_df.display()
 
 # COMMAND ----------
 
@@ -219,14 +219,14 @@ def get_groups(workspace, token):
   else:
     print("No Groups to process!")
     return []
-  
+
 missing_groups = []
 source_groups = get_groups(sourceWorkspaceUrl, sourceWorkspacePat)
 target_groups = get_groups(targetWorkspaceUrl, targetWorkspacePat)
 for group in source_groups:
   if group not in target_groups:
     missing_groups.append(group)
-    
+
 if len(missing_groups) == 0:
   print("Groups match!")
 else:
@@ -260,7 +260,7 @@ def get_users(workspace, token):
   else:
     print("No Users to process!")
     return spark.createDataFrame([], schema)
-  
+
 source_users = get_users(sourceWorkspaceUrl, sourceWorkspacePat)
 target_users = get_users(targetWorkspaceUrl, targetWorkspacePat)
 
@@ -269,7 +269,7 @@ if validation_df.count() == 0:
   print('Users match between workspaces!')
 else:
   print('Users don\'t match between workspaces!')
-  validation_df.display()    
+  validation_df.display()
 
 # COMMAND ----------
 
@@ -302,7 +302,7 @@ def get_workspace_objects(workspace, token, path):
   else:
     print("No workspace objects to process!")
     return spark.createDataFrame([], schema)
-  
+
 source_init_scripts = get_workspace_objects(sourceWorkspaceUrl, sourceWorkspacePat, '/FileStore/scripts')
 target_init_scripts = get_workspace_objects(targetWorkspaceUrl, targetWorkspacePat, '/FileStore/scripts')
 missing_init_scripts = source_init_scripts.drop("workspace").exceptAll(target_init_scripts.drop("workspace"))
